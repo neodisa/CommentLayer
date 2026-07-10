@@ -22,6 +22,7 @@ and self-hosted on your own database. Nothing phones home.
 - **Element screenshots** — every comment stores a thumbnail of what it looked like.
 - **Multi-user + realtime** via Supabase, or zero-backend **localStorage** for a quick solo try.
 - **Review panel** — search, sort, Open/Closed tabs, resolve / reopen / delete, inline edit, keyboard shortcuts (`C` comment · `P` panel · `H` hide pins · `Esc` back out).
+- **Works on touch** — on phones a bottom-right button arms commenting and the panel becomes a full-screen sheet, so the page underneath stays fully usable.
 
 ## Quick start (self-hosted, ~10 min)
 

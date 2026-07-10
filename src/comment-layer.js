@@ -334,13 +334,64 @@ import { buildContextBundle } from './context-bundle.js';
     .pinpop .pptop{display:flex;align-items:center;gap:8px;margin-bottom:6px}
     .pinpop .who{font-weight:600;font-size:13px;color:var(--hi)}
     .pinpop .ppbody{font-size:13px;line-height:1.45;color:#dbe0e7;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+
+    /* Controls that only exist on touch / narrow screens are hidden by default. */
+    .listbtn{display:none}
+    .modes .mstop{display:none}
+
+    /* ---- Mobile / narrow screens (≤640px) ----------------------------------
+       The right-edge pull-tab becomes a bottom-right pill in the thumb zone, the
+       review panel becomes a full-screen overlay, and the composers dock to the
+       bottom. Desktop layout is untouched. */
+    @media (max-width:640px){
+      .panel{width:100%;height:100%;border-left:0}
+      .pfoot{display:none}                              /* “C to comment” hint — no key on touch */
+
+      .handle{top:auto;bottom:calc(18px + env(safe-area-inset-bottom));right:16px;transform:none;
+        flex-direction:row;gap:8px;border-radius:999px;padding:13px 18px;box-shadow:0 8px 26px rgba(0,0,0,.5)}
+      .handle:hover{transform:none;padding-left:18px}
+      .handle:active{transform:scale(.95)}
+      .handle.shift{right:16px}                         /* ignore desktop side-shift */
+      .handle svg{width:20px;height:20px}
+      .handle .hlabel{writing-mode:horizontal-tb;transform:none;font-size:13px;letter-spacing:.01em}
+
+      .listbtn{display:inline-grid;place-items:center;position:fixed;right:16px;
+        bottom:calc(76px + env(safe-area-inset-bottom));width:46px;height:46px;border-radius:999px;
+        border:1px solid var(--line2);background:var(--s1);color:var(--hi);cursor:pointer;pointer-events:auto;
+        z-index:2147483200;box-shadow:0 8px 22px rgba(0,0,0,.5)}
+      .listbtn svg{width:19px;height:19px}
+      .listbtn .lbadge{position:absolute;top:-5px;right:-5px}
+
+      .arming .handle,.arming .listbtn{display:none}    /* while commenting, the mode bar takes over */
+      .panelopen .handle,.panelopen .listbtn{opacity:0;pointer-events:none}
+
+      .modes{left:12px;right:12px;transform:none;bottom:calc(12px + env(safe-area-inset-bottom))}
+      .modes.show{bottom:calc(12px + env(safe-area-inset-bottom))}
+      .modes.shift{left:12px}
+      .modes .mode{flex:1;justify-content:center;padding:12px 6px;font-size:12.5px}
+      .modes .mode[data-mode="area"]{display:none}      /* drag-select doesn't map to touch */
+      .modes .mstop{display:inline-flex;flex:0 0 auto}
+
+      /* Composers dock above the bottom mode bar (which is always visible while
+         commenting), so their action buttons never hide behind it. */
+      .mcompose{left:12px;right:12px;width:auto;bottom:calc(80px + env(safe-area-inset-bottom))}
+      .mcompose.shift{right:12px}
+      .mcta{font-size:16px}                             /* ≥16px avoids iOS auto-zoom */
+
+      .compose{left:12px !important;right:12px !important;width:auto !important;
+        top:auto !important;bottom:calc(80px + env(safe-area-inset-bottom)) !important}
+      .compose textarea{font-size:16px}
+
+      .search{font-size:16px}
+      .pin{min-width:30px;height:30px}                  /* larger tap target */
+    }
   `;
 
   /* ===========================================================================
    * 5. Controller
    * ========================================================================= */
   const CommentLayer = {
-    version: '1.0.0',   // bump on release; exposed so hosts/self-hosters can check what they run
+    version: '1.1.0',   // bump on release; exposed so hosts/self-hosters can check what they run
     _inited: false,
     init(opts = {}) {
       if (this._inited) return this;
@@ -404,6 +455,7 @@ import { buildContextBundle } from './context-bundle.js';
           <button class="mode" data-mode="text" title="Select text and comment on it">${icon('text')}Text</button>
           <button class="mode" data-mode="multi" title="Pick several elements for one comment">${icon('multi')}Multi</button>
           <button class="mode" data-mode="area" title="Drag a region to comment on">${icon('area')}Area</button>
+          <button class="mode mstop" title="Stop commenting">${icon('x', 15)}Done</button>
         </div>
         <div class="mcompose">
           <div class="mchead">${icon('multi', 14)}Comment on <b class="mccount">0</b> element(s)</div>
@@ -415,6 +467,7 @@ import { buildContextBundle } from './context-bundle.js';
           <span class="hlabel lbl">Comment</span>
           <span class="cbadge" hidden></span>
         </button>
+        <button class="listbtn" title="Open comments" aria-label="Open comments">${icon('comment', 18)}<span class="lbadge cbadge" hidden></span></button>
         <div class="panel">
           <div class="head">
             <span class="ttl">Comments</span><span class="count">0</span>
@@ -437,6 +490,8 @@ import { buildContextBundle } from './context-bundle.js';
       this._fab = root.querySelector('.handle');       // right-edge pull tab (opens panel + arms commenting)
       this._toggleBtn = this._fab;
       this._cbadge = root.querySelector('.cbadge');
+      this._listbtn = root.querySelector('.listbtn');  // mobile-only: opens the review panel
+      this._lbadge = root.querySelector('.lbadge');    // open-count badge on the mobile list button
       this._lbl = root.querySelector('.lbl');
       this._total = root.querySelector('.count');
       this._tab = 'open';
@@ -475,15 +530,17 @@ import { buildContextBundle } from './context-bundle.js';
       this._mcompose = root.querySelector('.mcompose');
       this._mcta = root.querySelector('.mcta');
       this._mccount = root.querySelector('.mccount');
-      root.querySelectorAll('.mode').forEach((b) => {
+      root.querySelectorAll('.mode:not(.mstop)').forEach((b) => {
         b.onclick = () => {
           this._clearMulti(); this._clearArea(); this._setHover(false); // drop any element outline
           this._mode = b.getAttribute('data-mode');
-          root.querySelectorAll('.mode').forEach((x) => x.classList.toggle('active', x === b));
+          root.querySelectorAll('.mode:not(.mstop)').forEach((x) => x.classList.toggle('active', x === b));
           this._mcompose.classList.toggle('show', this._mode === 'multi'); // multi uses a modal
           this._armComment(true); // picking a mode readies commenting
         };
       });
+      // Mobile mode bar carries a "Done" button (the pull-tab is hidden while commenting).
+      root.querySelector('.mstop').onclick = () => this._armComment(false);
       root.querySelector('.mcsave').onclick = () => this._finishMulti();
       root.querySelector('.mccancel').onclick = () => this._clearMulti();
       this._mcta.onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); this._finishMulti(); } };
@@ -491,6 +548,9 @@ import { buildContextBundle } from './context-bundle.js';
       // context); comment mode and the panel are otherwise independent — closing the
       // panel does NOT stop commenting.
       this._toggleBtn.onclick = () => this._toggleComment();
+      // Mobile: a dedicated button opens/closes the full-screen review panel, so the
+      // pull-tab is free to just toggle comment mode without covering the page.
+      this._listbtn.onclick = () => (this._panel.classList.contains('show') ? this._closePanel() : this._openPanel());
       root.querySelector('.x').onclick = () => this._closePanel();
 
       // Delegated actions on comment cards (resolve / reopen / delete),
@@ -626,7 +686,11 @@ import { buildContextBundle } from './context-bundle.js';
         else if (k === 'p') { this._panel.classList.contains('show') ? this._closePanel() : this._openPanel(); }
         else if (k === 'h') { this._togglePins(); }
       };
-      document.addEventListener('keydown', this._keyHandler, true);
+      // Bind on `window` (not `document`) in the capture phase: window capture runs
+      // before any document- or target-level handler, so a host page that intercepts
+      // keydown on document (or in the bubble phase) can't swallow the shortcut. This
+      // is why `C` failed on some host apps. One target only — no double-firing.
+      window.addEventListener('keydown', this._keyHandler, true);
 
       // host-page styles (light DOM): hover highlight + page shift when panel open
       const hl = document.createElement('style');
@@ -642,14 +706,20 @@ import { buildContextBundle } from './context-bundle.js';
     // beside content instead of covering it, and moves the FAB clear of the panel.
     _openPanel() {
       this._panel.classList.add('show');
-      document.body.classList.add('cl-shift');
-      this._fab.classList.add('shift');
-      if (this._mcompose) this._mcompose.classList.add('shift');
-      if (this._modesBar) this._modesBar.classList.add('shift'); // center the bottom mode bar in the area left of the panel
+      this._sh.classList.add('panelopen'); // mobile: full-screen overlay → hide the floating controls behind it
+      // On mobile the panel is a full-screen overlay, so the page must NOT be pushed
+      // aside (that would shove content off a phone screen). Only shift on desktop.
+      if (!this._isMobile()) {
+        document.body.classList.add('cl-shift');
+        this._fab.classList.add('shift');
+        if (this._mcompose) this._mcompose.classList.add('shift');
+        if (this._modesBar) this._modesBar.classList.add('shift'); // center the bottom mode bar in the area left of the panel
+      }
       setTimeout(() => this._placePins(), 220); // reflow finished → reposition pins
     },
     _closePanel() {
       this._panel.classList.remove('show');
+      this._sh.classList.remove('panelopen');
       document.body.classList.remove('cl-shift');
       this._fab.classList.remove('shift');
       if (this._mcompose) this._mcompose.classList.remove('shift'); // keep 'show': an armed multi-selection must stay saveable with the panel closed
@@ -657,19 +727,27 @@ import { buildContextBundle } from './context-bundle.js';
       // NOTE: closing the panel does NOT disarm — you can keep commenting with it closed.
       setTimeout(() => this._placePins(), 220);
     },
+    // Narrow / touch layout: matches the CSS breakpoint so JS behavior stays in sync.
+    _isMobile() { return typeof matchMedia === 'function' && matchMedia('(max-width:640px)').matches; },
     _armComment(on) {
       this.commentMode = on;
       this._toggleBtn.classList.toggle('active', on);
+      this._sh.classList.toggle('arming', on); // mobile: swap the pull-tab for the bottom mode bar
       if (this._lbl) this._lbl.textContent = on ? 'Stop' : 'Comment'; // vertical tab label; icon + badge stay
       if (this._modesBar) this._modesBar.classList.toggle('show', on); // bar shows only while actively commenting
       if (!on) { this._clearMulti(); this._clearArea(); if (this._mcompose) this._mcompose.classList.remove('show'); }
       this._setHover(on);
     },
-    // Toggle comment mode independently of the panel. Turning it on opens the panel
-    // for context; turning it off leaves the panel exactly as it is.
+    // Toggle comment mode independently of the panel. On desktop, turning it on also
+    // opens the side panel for context; on mobile the panel is a full-screen overlay,
+    // so we leave it closed (you need to see the page to tap elements — the list
+    // button opens the panel to review). Turning it off never touches the panel.
     _toggleComment() {
       if (this.commentMode) { this._armComment(false); }
-      else { if (!this._panel.classList.contains('show')) this._openPanel(); this._armComment(true); }
+      else {
+        if (!this._isMobile() && !this._panel.classList.contains('show')) this._openPanel();
+        this._armComment(true);
+      }
     },
 
     // ---- annotation modes ----
@@ -929,6 +1007,7 @@ import { buildContextBundle } from './context-bundle.js';
       const route = location.pathname + location.hash;
       const hereOpen = open.filter((c) => !c.meta || !c.meta.route || c.meta.route === route).length;
       if (this._cbadge) { this._cbadge.textContent = hereOpen; this._cbadge.hidden = hereOpen === 0; }
+      if (this._lbadge) { this._lbadge.textContent = hereOpen; this._lbadge.hidden = hereOpen === 0; }
       if (this._total) this._total.textContent = this.comments.length;
       // Tabs: show only the active set (Open | Closed), not both stacked. Counts are totals.
       const tab = this._tab || 'open';
