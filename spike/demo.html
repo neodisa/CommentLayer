@@ -1,0 +1,345 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Comment layer — live regeneration demo</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --line:#262b36; --ink:#e7ebf2; --mut:#9aa4b2;
+    --accent:#5b8cff; --open:#f4b740; --resolved:#3ecf8e; --pin:#5b8cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,Segoe UI,Roboto,sans-serif}
+  .wrap{display:grid;grid-template-columns:1fr 340px;gap:0;height:100vh}
+  .left{position:relative;overflow:auto;padding:28px}
+  .right{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+  .bar{display:flex;gap:8px;align-items:center;padding:14px 28px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+  .bar h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.2px}
+  .bar .v{color:var(--mut);font-size:12px}
+  button{font:inherit;color:var(--ink);background:#222735;border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+  button:hover{filter:brightness(1.1)}
+  .hint{color:var(--mut);font-size:12px;margin-left:auto}
+
+  /* the "generated app" being reviewed */
+  #stage{position:relative}
+  #stage *{cursor:crosshair}
+  .app{max-width:680px;margin:0 auto;background:#fff;color:#11151c;border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  .app nav{display:flex;gap:18px;padding:14px 22px;border-bottom:1px solid #eef0f3;font-weight:600;font-size:13px}
+  .app .hero{padding:34px 22px 10px}
+  .app h1{margin:0 0 6px;font-size:26px}
+  .app .sub{color:#5b6472;margin:0}
+  .app .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 22px}
+  .app .card{border:1px solid #eef0f3;border-radius:12px;padding:16px}
+  .app .card h3{margin:0 0 6px;font-size:15px}
+  .app .card p{margin:0;color:#5b6472;font-size:13px}
+  .app .promo{margin:4px 22px 0;background:#fff4d6;color:#8a5a00;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600}
+  .app .foot{padding:20px 22px 26px;display:flex;justify-content:center}
+  .bg-gray{background:#e9edf2;color:#11151c}
+  .bg-blue{background:#2f6bff;color:#fff}
+  .btn{border:0;border-radius:10px;padding:12px 22px;font-weight:700;font-size:14px;cursor:pointer}
+
+  /* comment pins overlay */
+  #pins{position:absolute;inset:0;pointer-events:none}
+  .pin{position:absolute;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50% 50% 50% 2px;
+       background:var(--pin);color:#0b1020;font-weight:700;font-size:12px;display:grid;place-items:center;
+       box-shadow:0 2px 8px rgba(0,0,0,.4);pointer-events:auto;cursor:pointer;border:2px solid #fff}
+  .pin.resolved{background:var(--resolved)}
+
+  /* sidebar */
+  .panelhead{padding:14px 16px;border-bottom:1px solid var(--line);font-weight:600;display:flex;align-items:center;gap:8px}
+  .panelhead .count{color:var(--mut);font-weight:400;font-size:12px}
+  .list{overflow:auto;padding:10px 12px;flex:1;min-height:0}
+  .c{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#12151c}
+  .c .top{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .c .who{font-weight:600;font-size:13px}
+  .c .badge{margin-left:auto;font-size:11px;padding:2px 8px;border-radius:999px}
+  .badge.open{background:rgba(244,183,64,.15);color:var(--open)}
+  .badge.resolved{background:rgba(62,207,142,.15);color:var(--resolved)}
+  .c .body{font-size:13px}
+  .c .meta{color:var(--mut);font-size:11px;margin-top:6px}
+  .c.hist{opacity:.7}
+  .sect{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin:6px 4px}
+  .empty{color:var(--mut);font-size:12px;padding:8px 4px}
+
+  /* compose popover */
+  #compose{position:absolute;z-index:20;width:240px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);display:none}
+  #compose textarea{width:100%;height:60px;resize:none;background:#0e1116;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px;font:inherit}
+  #compose .row{display:flex;gap:6px;margin-top:8px;justify-content:flex-end}
+</style>
+
+<div class="bar">
+  <h1>Comment layer</h1>
+  <span class="v" id="vlabel">version 1</span>
+  <span class="hint">Click any element in the page to leave a comment · then hit Regenerate</span>
+  <button id="regen" class="primary">⟳ Regenerate</button>
+  <button id="reset">Reset</button>
+</div>
+
+<div class="wrap">
+  <div class="left">
+    <div id="stage"></div>
+    <div id="pins"></div>
+    <div id="compose">
+      <textarea id="ctext" placeholder="Leave a change request…"></textarea>
+      <div class="row">
+        <button id="ccancel">Cancel</button>
+        <button id="csave" class="primary">Comment</button>
+      </div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="panelhead">Comments <span class="count" id="counts"></span></div>
+    <div class="list" id="list"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   The SAME anchor/diff algorithm as the Node spike, ported to the real DOM.
+   fingerprint(el) is captured when a comment is made; classify(fp) decides,
+   after a regeneration, whether the region was rewritten (RESOLVE) or is
+   unchanged (CARRY_FORWARD). Bias: only resolve when confident it changed.
+============================================================================ */
+const stage = () => document.getElementById('stage');
+
+function hash(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(36);}
+function isHashy(t){
+  if(/^(css-|sc-|jsx-|emotion-|_)/i.test(t))return true;
+  if(/^[a-z]{1,3}[0-9a-f]{5,}$/i.test(t))return true;
+  if(/^[0-9a-f]{6,}$/i.test(t))return true;
+  if(t.length>=6 && !/[aeiou]/i.test(t))return true;
+  return false;
+}
+const norm = s => (s||'').replace(/\s+/g,' ').trim().toLowerCase();
+const stableClasses = el => [...el.classList].filter(t=>!isHashy(t)).sort();
+
+function structSig(el){let s='';(function walk(x,d){for(const c of x.children){s+=c.tagName.toLowerCase()+'('+d+')';walk(c,d+1);}})(el,1);return hash(s);}
+function styleSig(el){let s=stableClasses(el).join('.');(function walk(x){for(const c of x.children){s+='|'+stableClasses(c).join('.');walk(c);}})(el);return hash(s);}
+function stableId(el){
+  if(el.getAttribute('data-testid'))return 'testid:'+el.getAttribute('data-testid');
+  if(el.id && !isHashy(el.id))return 'id:'+el.id;
+  if(el.getAttribute('aria-label'))return 'aria:'+norm(el.getAttribute('aria-label'));
+  return null;
+}
+function tagPath(el){
+  const path=[];let n=el;const root=stage();
+  while(n && n!==root && n.parentElement){
+    const sibs=[...n.parentElement.children].filter(c=>c.tagName===n.tagName);
+    path.unshift(n.tagName.toLowerCase()+'['+sibs.indexOf(n)+']');
+    n=n.parentElement;
+  }
+  return path;
+}
+function fingerprint(el){
+  const text=norm(el.textContent);
+  return {tag:el.tagName.toLowerCase(),stableId:stableId(el),text,textHash:hash(text),
+          structHash:structSig(el),styleHash:styleSig(el),path:tagPath(el)};
+}
+function pathSim(a,b){const ra=[...a].reverse(),rb=[...b].reverse();let m=0;for(let i=0;i<Math.min(ra.length,rb.length);i++){if(ra[i]===rb[i])m++;else break;}return m/Math.max(ra.length,rb.length,1);}
+function textSim(a,b){const wa=new Set(a.split(' ').filter(Boolean)),wb=new Set(b.split(' ').filter(Boolean));if(!wa.size&&!wb.size)return 1;let i=0;for(const w of wa)if(wb.has(w))i++;return i/(wa.size+wb.size-i||1);}
+
+function candidates(){return [...stage().querySelectorAll('*')];}
+function findMatch(fp){
+  const cs=candidates();
+  if(fp.stableId){
+    const byId=cs.filter(c=>stableId(c)===fp.stableId);
+    if(byId.length===1)return {el:byId[0],score:1};
+    if(byId.length>1){let b=null,bs=-1;for(const c of byId){const s=textSim(fp.text,norm(c.textContent));if(s>bs){bs=s;b=c;}}return {el:b,score:.9};}
+  }
+  let best=null,bestScore=-1;
+  for(const c of cs){
+    if(c.tagName.toLowerCase()!==fp.tag)continue;
+    const score=0.25*pathSim(fp.path,tagPath(c))+0.75*textSim(fp.text,norm(c.textContent));
+    if(score>bestScore){bestScore=score;best=c;}
+  }
+  return {el:best,score:bestScore};
+}
+const THRESH=0.35;
+function classify(fp){
+  const m=findMatch(fp);
+  if(!m.el || m.score<THRESH)return {decision:'RESOLVE',reason:'region removed / replaced',el:null};
+  const nx=fingerprint(m.el);
+  const tch=nx.textHash!==fp.textHash, sch=nx.structHash!==fp.structHash, ych=nx.styleHash!==fp.styleHash;
+  if(tch||sch||ych){
+    const r=[];if(tch)r.push('text');if(sch)r.push('structure');if(ych)r.push('style');
+    return {decision:'RESOLVE',reason:'regenerated ('+r.join('+')+')',el:m.el};
+  }
+  return {decision:'CARRY_FORWARD',reason:'unchanged region',el:m.el};
+}
+
+/* ============================================================================
+   Sample "AI-generated" app, with successive regeneration passes.
+   Each version simulates what an AI builder might emit next.
+============================================================================ */
+const versions = [
+  // v1
+  `<div class="app">
+     <nav><span>Acme</span><span>Features</span><span>Pricing</span></nav>
+     <div class="hero">
+       <h1>Welcome to Acme</h1>
+       <p class="sub">The simplest way to ship your product.</p>
+     </div>
+     <div class="promo">🔥 Launch week: 50% off annual plans</div>
+     <div class="cards">
+       <div class="card css-1a2b3c"><h3>Fast checkout</h3><p>Pay in one tap with saved cards.</p></div>
+       <div class="card css-4d5e6f"><h3>Secure by default</h3><p>Every transaction is encrypted end to end.</p></div>
+     </div>
+     <div class="foot"><button class="btn bg-gray">Buy now</button></div>
+   </div>`,
+  // v2 — hero reworded, promo removed, card A rewritten, button restyled,
+  //      card B + nav untouched (hashed classes rotated to test churn-resistance)
+  `<div class="app">
+     <nav><span>Acme</span><span>Features</span><span>Pricing</span></nav>
+     <div class="hero">
+       <h1>Ship faster with Acme</h1>
+       <p class="sub">Go from idea to live product in minutes.</p>
+     </div>
+     <div class="cards">
+       <div class="card css-9z8y7x"><h3>Lightning checkout</h3><p>Buy instantly — no forms, no friction.</p></div>
+       <div class="card css-7g8h9i"><h3>Secure by default</h3><p>Every transaction is encrypted end to end.</p></div>
+     </div>
+     <div class="foot"><button class="btn bg-blue">Buy now</button></div>
+   </div>`,
+  // v3 — card B finally reworded; everything else from v2 kept
+  `<div class="app">
+     <nav><span>Acme</span><span>Features</span><span>Pricing</span></nav>
+     <div class="hero">
+       <h1>Ship faster with Acme</h1>
+       <p class="sub">Go from idea to live product in minutes.</p>
+     </div>
+     <div class="cards">
+       <div class="card css-9z8y7x"><h3>Lightning checkout</h3><p>Buy instantly — no forms, no friction.</p></div>
+       <div class="card css-2k3l4m"><h3>Bank-grade security</h3><p>SOC 2 compliant, encrypted everywhere.</p></div>
+     </div>
+     <div class="foot"><button class="btn bg-blue">Buy now</button></div>
+   </div>`,
+];
+
+/* ============================================================================ */
+let vi = 0;                 // current version index
+let comments = [];          // {id, author, text, status, fp, el}
+let nextId = 1;
+const authors = ['Sergey','Designer','PM','Client'];
+let pendingEl = null;       // element being commented on
+
+function render(){
+  stage().innerHTML = versions[vi];
+  document.getElementById('vlabel').textContent = 'version '+(vi+1);
+  // re-locate each open comment's element in the freshly rendered version
+  for(const c of comments){
+    if(c.status!=='open')continue;
+    const m=findMatch(c.fp);
+    c.el = (m.el && m.score>=THRESH)? m.el : null;
+  }
+  placePins();
+  renderList();
+}
+
+function placePins(){
+  const pins=document.getElementById('pins'); pins.innerHTML='';
+  const base=stage().getBoundingClientRect();
+  for(const c of comments){
+    if(c.status!=='open' || !c.el)continue;
+    const r=c.el.getBoundingClientRect();
+    const p=document.createElement('div');
+    p.className='pin'; p.textContent=c.id;
+    p.style.left=(r.left-base.left+stage().scrollLeft+10)+'px';
+    p.style.top=(r.top-base.top+stage().scrollTop+10)+'px';
+    p.title=c.author+': '+c.text;
+    p.onclick=()=>{const el=document.getElementById('c'+c.id);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});};
+    pins.appendChild(p);
+  }
+}
+
+function renderList(){
+  const open=comments.filter(c=>c.status==='open');
+  const hist=comments.filter(c=>c.status==='resolved');
+  const L=document.getElementById('list'); L.innerHTML='';
+  document.getElementById('counts').textContent=`· ${open.length} open · ${hist.length} resolved`;
+
+  L.insertAdjacentHTML('beforeend',`<div class="sect">Open (${open.length})</div>`);
+  if(!open.length)L.insertAdjacentHTML('beforeend',`<div class="empty">No open comments. Click an element to add one.</div>`);
+  for(const c of open)L.insertAdjacentHTML('beforeend',card(c,false));
+
+  if(hist.length){
+    L.insertAdjacentHTML('beforeend',`<div class="sect">History — auto-resolved by regeneration (${hist.length})</div>`);
+    for(const c of hist)L.insertAdjacentHTML('beforeend',card(c,true));
+  }
+}
+function card(c,isHist){
+  const badge = c.status==='open'?'<span class="badge open">open</span>':'<span class="badge resolved">resolved</span>';
+  const meta = c.status==='open'
+     ? `pinned to <code>&lt;${c.fp.tag}&gt;</code> · v${c.bornV}`
+     : `auto-resolved v${c.bornV}→v${c.resolvedV} · ${c.resolveReason}`;
+  return `<div class="c ${isHist?'hist':''}" id="c${c.id}">
+     <div class="top"><span class="who">#${c.id} ${c.author}</span>${badge}</div>
+     <div class="body">${escapeHtml(c.text)}</div>
+     <div class="meta">${meta}</div>
+   </div>`;
+}
+function escapeHtml(s){return s.replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+
+/* ---- commenting ---- */
+stage().addEventListener('click',e=>{
+  const el=e.target.closest('#stage *'); if(!el || el===stage())return;
+  e.stopPropagation(); pendingEl=el; openCompose(el);
+});
+function openCompose(el){
+  const cmp=document.getElementById('compose');
+  const base=document.querySelector('.left').getBoundingClientRect();
+  const r=el.getBoundingClientRect();
+  cmp.style.left=Math.min(r.left-base.left+20, base.width-260)+'px';
+  cmp.style.top=(r.bottom-base.top+8 + document.querySelector('.left').scrollTop)+'px';
+  cmp.style.display='block';
+  document.getElementById('ctext').value=''; document.getElementById('ctext').focus();
+}
+document.getElementById('ccancel').onclick=()=>{document.getElementById('compose').style.display='none';pendingEl=null;};
+document.getElementById('csave').onclick=()=>{
+  const text=document.getElementById('ctext').value.trim(); if(!text||!pendingEl)return;
+  comments.push({id:nextId++,author:authors[(nextId)%authors.length],text,status:'open',
+                 fp:fingerprint(pendingEl),el:pendingEl,bornV:vi+1});
+  document.getElementById('compose').style.display='none'; pendingEl=null;
+  placePins(); renderList();
+};
+
+/* ---- regeneration: the core moment ---- */
+document.getElementById('regen').onclick=()=>{
+  if(vi>=versions.length-1){flash('No more regeneration passes in this demo');return;}
+  const fromV=vi+1; vi++;
+  stage().innerHTML=versions[vi];
+  document.getElementById('vlabel').textContent='version '+(vi+1);
+  let resolved=0,carried=0;
+  for(const c of comments){
+    if(c.status!=='open')continue;
+    const res=classify(c.fp);
+    if(res.decision==='RESOLVE'){
+      c.status='resolved'; c.resolvedV=vi+1; c.resolveReason=res.reason; resolved++;
+    }else{
+      c.el=res.el; c.fp=fingerprint(res.el); /* re-baseline to the now-displayed version */ carried++;
+    }
+  }
+  placePins(); renderList();
+  flash(`Regenerated v${fromV}→v${vi+1}: ${resolved} auto-resolved · ${carried} carried forward`);
+};
+document.getElementById('reset').onclick=()=>{vi=0;comments=[];nextId=1;render();flash('Reset to version 1');};
+
+let flashT;
+function flash(msg){
+  let f=document.getElementById('flash');
+  if(!f){f=document.createElement('div');f.id='flash';
+    f.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222735;border:1px solid #2f3647;color:#e7ebf2;padding:10px 16px;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);z-index:50;font-size:13px';
+    document.body.appendChild(f);}
+  f.textContent=msg; f.style.opacity='1'; clearTimeout(flashT);
+  flashT=setTimeout(()=>f.style.opacity='0',2600);
+}
+
+window.addEventListener('resize',placePins);
+document.querySelector('.left').addEventListener('scroll',placePins);
+render();
+
+/* expose a tiny hook so a headless check can drive the demo deterministically */
+window.__demo = {
+  addComment(selector,text){const el=stage().querySelector(selector);comments.push({id:nextId++,author:'Test',text,status:'open',fp:fingerprint(el),el,bornV:vi+1});placePins();renderList();},
+  regen(){document.getElementById('regen').click();},
+  state(){return comments.map(c=>({id:c.id,status:c.status,reason:c.resolveReason||null}));}
+};
+</script>

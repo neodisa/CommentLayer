@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CommentLayer — showcase host</title>
+<!--
+  Clean host page for screenshots / demos: same sample app as index.html but with
+  NO demo top bar, and it self-seeds a spread of sample comments on every open so the
+  panel is always full. Serve over http (not file://) e.g. `python3 -m http.server`.
+-->
+<style>
+  body{margin:0;background:#0f1115;color:#e7ebf2;font:15px/1.6 ui-sans-serif,system-ui,sans-serif;min-height:100vh}
+  .wrap{max-width:720px;margin:44px auto;padding:0 16px}
+  .app{background:#fff;color:#11151c;border-radius:14px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+  nav{display:flex;gap:18px;padding:14px 22px;border-bottom:1px solid #eef0f3;font-weight:600;font-size:13px}
+  .hero{padding:34px 22px 8px}
+  h1{margin:0 0 6px;font-size:26px}
+  .sub{color:#5b6472;margin:0}
+  .promo{margin:6px 22px 0;background:#fff4d6;color:#8a5a00;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 22px}
+  .card{border:1px solid #eef0f3;border-radius:12px;padding:16px}
+  .card h3{margin:0 0 6px;font-size:15px}
+  .card p{margin:0;color:#5b6472;font-size:13px}
+  .foot{padding:18px 22px 26px;display:flex;justify-content:center}
+  .btn{border:0;border-radius:10px;padding:12px 22px;font-weight:700;font-size:14px;cursor:pointer}
+  .bg-gray{background:#e9edf2;color:#11151c}.bg-blue{background:#2f6bff;color:#fff}
+</style>
+
+<div class="wrap"><div id="app"></div></div>
+
+<script src="../dist/comment-layer.min.js"></script>
+<script>
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="app">
+      <nav><span>Acme</span><span>Features</span><span>Pricing</span></nav>
+      <div class="hero"><h1>Welcome to Acme</h1><p class="sub">The simplest way to ship your product.</p></div>
+      <div class="promo">🔥 Launch week: 50% off annual plans</div>
+      <div class="cards">
+        <div class="card css-1a2b3c"><h3>Fast checkout</h3><p>Pay in one tap with saved cards.</p></div>
+        <div class="card css-4d5e6f"><h3>Secure by default</h3><p>Every transaction is encrypted end to end.</p></div>
+      </div>
+      <div class="foot"><button class="btn bg-gray">Buy now</button></div>
+    </div>`;
+
+  // deterministic clean state on every open
+  const PID = 'showcase';
+  localStorage.removeItem('comment-layer:' + PID);
+  localStorage.removeItem('comment-layer:seqmax:' + PID);
+  localStorage.setItem('comment-layer:user', 'Tester');
+
+  CommentLayer.init({ projectId: PID, target: app });
+
+  // seed a spread of sample comments through the real code path (real fingerprints → real pins)
+  const q = (s) => app.querySelector(s), cards = app.querySelectorAll('.card');
+  CommentLayer._addComment(q('h1'), 'Make the headline bigger and bump the contrast a bit.', '', { mode: 'element' });
+  CommentLayer._addComment(q('.sub'), 'This tagline is too generic — try something punchier.', 'The simplest way to ship your product.', { mode: 'text' });
+  CommentLayer._addComment(q('.promo'), 'Move the launch-week banner above the hero.', '', { mode: 'element' });
+  CommentLayer._addComment(q('.btn'), "Use the brand blue and change the label to 'Get started'.", '', { mode: 'element' });
+  CommentLayer._toggleMulti(cards[0]); CommentLayer._toggleMulti(cards[1]);
+  CommentLayer._mcta.value = 'These two cards should be equal height.';
+  CommentLayer._finishMulti();
+  const cc = q('.cards'), r = cc.getBoundingClientRect();
+  CommentLayer._addComment(cc, 'Tighten the vertical spacing in this whole section.', '', { mode: 'area', rect: { x: r.left, y: r.top, w: r.width, h: r.height } });
+
+  // vary authors, resolve one (Open + Closed mix), resting state, open the panel
+  const cs = CommentLayer.comments.slice().sort((a, b) => CommentLayer._seqOf(a) - CommentLayer._seqOf(b));
+  ['Anna K.', 'Serg', 'Max', 'Serg', 'Tester', 'Anna K.'].forEach((n, i) => { if (cs[i]) cs[i].author = n; });
+  if (cs[2]) CommentLayer.resolveComment(cs[2].id);
+  CommentLayer._armComment(false);
+  CommentLayer.open();
+</script>

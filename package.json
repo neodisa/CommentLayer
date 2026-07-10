@@ -1,0 +1,49 @@
+{
+  "name": "comment-layer",
+  "version": "1.0.0",
+  "description": "Figma-style comments for AI-generated web UIs. A comment is a change request; when its region is regenerated it auto-resolves. Drop-in, framework-agnostic, Shadow-DOM isolated.",
+  "type": "module",
+  "main": "src/comment-layer.js",
+  "browser": "dist/comment-layer.min.js",
+  "unpkg": "dist/comment-layer.min.js",
+  "jsdelivr": "dist/comment-layer.min.js",
+  "files": [
+    "bin",
+    "src",
+    "dist",
+    "supabase",
+    "README.md"
+  ],
+  "bin": {
+    "comment-layer": "bin/cli.mjs"
+  },
+  "scripts": {
+    "build": "esbuild src/comment-layer.js --bundle --format=iife --minify --outfile=dist/comment-layer.min.js && esbuild src/supabase-adapter.js --bundle --format=iife --minify --outfile=dist/supabase-adapter.min.js",
+    "test": "node spike/run.mjs && node spike/run-real.mjs && node test/context-bundle.test.mjs && node test/supabase-mappers.test.mjs",
+    "test:e2e": "node test/supabase-e2e.mjs",
+    "export:ai": "node scripts/export-comments.mjs"
+  },
+  "keywords": [
+    "comments",
+    "feedback",
+    "annotation",
+    "review",
+    "ai-generated-ui",
+    "figma",
+    "auto-resolve",
+    "widget",
+    "embeddable",
+    "shadow-dom"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neodisa/CommentLayer"
+  },
+  "homepage": "https://github.com/neodisa/CommentLayer#readme",
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.110.0",
+    "esbuild": "^0.25.0"
+  },
+  "sideEffects": true
+}

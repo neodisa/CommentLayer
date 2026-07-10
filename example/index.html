@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>comment-layer — example host</title>
+<style>
+  body{margin:0;background:#0f1115;color:#e7ebf2;font:15px/1.6 ui-sans-serif,system-ui,sans-serif;min-height:100vh}
+  .topbar{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid #262b36;background:#11141a;position:sticky;top:0;z-index:10}
+  .topbar b{font-size:14px}
+  .topbar .mut{color:#9aa4b2;font-size:12px}
+  .topbar button{margin-left:auto;font:13px inherit;background:#5b8cff;color:#0b1020;border:0;border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer}
+  .wrap{max-width:720px;margin:30px auto;padding:0 16px}
+  /* the "AI-generated" app under review */
+  .app{background:#fff;color:#11151c;border-radius:14px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+  nav{display:flex;gap:18px;padding:14px 22px;border-bottom:1px solid #eef0f3;font-weight:600;font-size:13px}
+  .hero{padding:34px 22px 8px}
+  h1{margin:0 0 6px;font-size:26px}
+  .sub{color:#5b6472;margin:0}
+  .promo{margin:6px 22px 0;background:#fff4d6;color:#8a5a00;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 22px}
+  .card{border:1px solid #eef0f3;border-radius:12px;padding:16px}
+  .card h3{margin:0 0 6px;font-size:15px}
+  .card p{margin:0;color:#5b6472;font-size:13px}
+  .foot{padding:18px 22px 26px;display:flex;justify-content:center}
+  .btn{border:0;border-radius:10px;padding:12px 22px;font-weight:700;font-size:14px;cursor:pointer}
+  .bg-gray{background:#e9edf2;color:#11151c}.bg-blue{background:#2f6bff;color:#fff}
+</style>
+
+<div class="topbar">
+  <b>Acme</b><span class="mut">— a host app that embedded comment-layer in one script tag</span>
+  <button id="regen">⟳ Regenerate UI (AI pass)</button>
+</div>
+
+<div class="wrap">
+  <div id="app"></div>
+</div>
+
+<!-- 1. drop in the script -->
+<script src="../dist/comment-layer.min.js"></script>
+<script>
+  // sample "generated" UI versions (an AI builder would emit these)
+  const versions = [
+    `<div class="app">
+       <nav><span>Acme</span><span>Features</span><span>Pricing</span></nav>
+       <div class="hero"><h1>Welcome to Acme</h1><p class="sub">The simplest way to ship your product.</p></div>
+       <div class="promo">🔥 Launch week: 50% off annual plans</div>
+       <div class="cards">
+         <div class="card css-1a2b3c"><h3>Fast checkout</h3><p>Pay in one tap with saved cards.</p></div>
+         <div class="card css-4d5e6f"><h3>Secure by default</h3><p>Every transaction is encrypted end to end.</p></div>
+       </div>
+       <div class="foot"><button class="btn bg-gray">Buy now</button></div>
+     </div>`,
+    `<div class="app">
+       <nav><span>Acme</span><span>Features</span><span>Pricing</span></nav>
+       <div class="hero"><h1>Ship faster with Acme</h1><p class="sub">Go from idea to live product in minutes.</p></div>
+       <div class="cards">
+         <div class="card css-9z8y7x"><h3>Lightning checkout</h3><p>Buy instantly — no forms, no friction.</p></div>
+         <div class="card css-7g8h9i"><h3>Secure by default</h3><p>Every transaction is encrypted end to end.</p></div>
+       </div>
+       <div class="foot"><button class="btn bg-blue">Buy now</button></div>
+     </div>`,
+    `<div class="app">
+       <nav><span>Acme</span><span>Features</span><span>Pricing</span></nav>
+       <div class="hero"><h1>Ship faster with Acme</h1><p class="sub">Go from idea to live product in minutes.</p></div>
+       <div class="cards">
+         <div class="card css-9z8y7x"><h3>Lightning checkout</h3><p>Buy instantly — no forms, no friction.</p></div>
+         <div class="card css-2k3l4m"><h3>Bank-grade security</h3><p>SOC 2 compliant, encrypted everywhere.</p></div>
+       </div>
+       <div class="foot"><button class="btn bg-blue">Buy now</button></div>
+     </div>`,
+  ];
+  let vi = 0;
+  const app = document.getElementById('app');
+  app.innerHTML = versions[vi];
+
+  // 2. init — localStorage by default, zero backend
+  CommentLayer.init({ projectId: 'acme-demo', target: app });
+
+  // 3. after the AI regenerates the UI, tell comment-layer
+  document.getElementById('regen').onclick = () => {
+    vi = Math.min(vi + 1, versions.length - 1);
+    app.innerHTML = versions[vi];
+    const r = CommentLayer.regenerated();   // <- the whole integration is this one call
+    console.log('regenerated:', r);
+  };
+</script>

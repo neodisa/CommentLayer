@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+comments-for-ai.md
+comments-for-ai.json
+comments-for-ai-shots/
+comment-summary.md
+comment-summary-shots/
+.impeccable/
+.playwright-mcp/
