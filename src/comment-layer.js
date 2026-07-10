@@ -391,7 +391,7 @@ import { buildContextBundle } from './context-bundle.js';
    * 5. Controller
    * ========================================================================= */
   const CommentLayer = {
-    version: '1.1.0',   // bump on release; exposed so hosts/self-hosters can check what they run
+    version: '1.1.1',   // bump on release; exposed so hosts/self-hosters can check what they run
     _inited: false,
     init(opts = {}) {
       if (this._inited) return this;
@@ -875,9 +875,14 @@ import { buildContextBundle } from './context-bundle.js';
           canvas = await h2c(target, base);
         } else if (target && typeof target.w === 'number') {
           const r = target;
+          // x/y are absolute page coords (viewport rect + current scroll). html2canvas
+          // must be told scrollX/scrollY:0 so it treats them as page coords — otherwise
+          // it re-applies the live scroll and the crop lands scroll-pixels off-target
+          // (on a scrolled page you'd screenshot the wrong region, not what was selected).
           canvas = await h2c(document.body, Object.assign({
             x: r.x + (window.scrollX || 0), y: r.y + (window.scrollY || 0),
             width: Math.max(1, r.w), height: Math.max(1, r.h),
+            scrollX: 0, scrollY: 0,
             windowWidth: document.documentElement.scrollWidth,
             windowHeight: document.documentElement.scrollHeight,
           }, base));
