@@ -337,17 +337,41 @@ import { buildContextBundle } from './context-bundle.js';
 
     /* Controls that only exist on touch / narrow screens are hidden by default. */
     .modes .mstop{display:none}
+    .sheetpeek{display:none}
+    .sheetgrab{display:none}
+    .sheetscrim{display:none}
 
     /* ---- Mobile / narrow screens (≤640px) ----------------------------------
-       The right-edge pull-tab becomes a single round comment FAB in the thumb
-       zone; the review panel becomes a full-screen overlay (opened by tapping a
-       pin); the composers dock to the bottom. Desktop layout is untouched. */
+       One round comment FAB starts/stops commenting; the review panel is a
+       bottom sheet pulled up by a centered drawer tab (the panel's own handle,
+       not a second button). Desktop layout is untouched. */
     @media (max-width:640px){
-      .panel{width:100%;height:100%;border-left:0}
+      /* Review panel → bottom sheet (slides up from the bottom). */
+      .panel{top:auto;bottom:0;left:0;right:0;width:100%;height:86vh;border-left:0;
+        border-top:1px solid var(--line);border-radius:18px 18px 0 0;transform:translateY(100%);
+        box-shadow:0 -18px 50px rgba(0,0,0,.55)}
+      /* base .panel.show{transform:none} lands it fully open at the bottom */
       .pfoot{display:none}                              /* “C to comment” hint — no key on touch */
 
-      /* One round icon-only FAB: tap to start/stop commenting. */
-      .handle{top:auto;bottom:calc(18px + env(safe-area-inset-bottom));right:16px;transform:none;
+      .sheetgrab{display:block;flex:none;width:38px;height:4px;border-radius:999px;
+        background:var(--line2);margin:9px auto 3px;cursor:pointer}
+
+      /* Dim, tap-to-close scrim behind the open sheet. */
+      .sheetscrim{position:fixed;inset:0;background:rgba(6,7,9,.5);z-index:2147483140;
+        opacity:0;pointer-events:none;transition:opacity .2s ease}
+      .panelopen .sheetscrim{display:block;opacity:1;pointer-events:auto}
+
+      /* Bottom drawer tab that opens the sheet — the panel's handle. */
+      .sheetpeek{display:inline-flex;align-items:center;gap:7px;position:fixed;left:50%;
+        transform:translateX(-50%);bottom:0;z-index:2147483180;pointer-events:auto;cursor:pointer;
+        border:1px solid var(--line2);border-bottom:0;background:var(--s1);color:var(--hi);
+        font:600 13px/1 inherit;padding:11px 20px calc(11px + env(safe-area-inset-bottom));
+        border-radius:14px 14px 0 0;box-shadow:0 -6px 20px rgba(0,0,0,.4)}
+      .sheetpeek svg{width:16px;height:16px;color:var(--mid)}
+      .arming .sheetpeek,.panelopen .sheetpeek{display:none}
+
+      /* One round icon-only FAB (above the drawer tab): tap to start/stop commenting. */
+      .handle{top:auto;bottom:calc(66px + env(safe-area-inset-bottom));right:16px;transform:none;
         width:56px;height:56px;padding:0;gap:0;justify-content:center;border-radius:999px;
         box-shadow:0 10px 28px rgba(0,0,0,.5)}
       .handle:hover{transform:none;padding:0}
@@ -386,7 +410,7 @@ import { buildContextBundle } from './context-bundle.js';
    * 5. Controller
    * ========================================================================= */
   const CommentLayer = {
-    version: '1.1.2',   // bump on release; exposed so hosts/self-hosters can check what they run
+    version: '1.1.3',   // bump on release; exposed so hosts/self-hosters can check what they run
     _inited: false,
     init(opts = {}) {
       if (this._inited) return this;
@@ -462,7 +486,10 @@ import { buildContextBundle } from './context-bundle.js';
           <span class="hlabel lbl">Comment</span>
           <span class="cbadge" hidden></span>
         </button>
+        <div class="sheetscrim"></div>
+        <button class="sheetpeek" title="Open comments" aria-label="Open comments">${icon('comment', 15)}<span class="speektxt">Comments</span></button>
         <div class="panel">
+          <div class="sheetgrab" aria-hidden="true"></div>
           <div class="head">
             <span class="ttl">Comments</span><span class="count">0</span>
             <button class="eye iconbtn" data-tip="Hide pins" aria-label="Hide pins">${icon('eyeOff')}</button>
@@ -540,6 +567,12 @@ import { buildContextBundle } from './context-bundle.js';
       // context); comment mode and the panel are otherwise independent — closing the
       // panel does NOT stop commenting.
       this._toggleBtn.onclick = () => this._toggleComment();
+      // Mobile bottom-sheet controls: the drawer tab opens the panel; the scrim and
+      // the grabber close it. (No-ops on desktop, where these are display:none.)
+      this._speektxt = root.querySelector('.speektxt');
+      root.querySelector('.sheetpeek').onclick = () => this._openPanel();
+      root.querySelector('.sheetscrim').onclick = () => this._closePanel();
+      root.querySelector('.sheetgrab').onclick = () => this._closePanel();
       root.querySelector('.x').onclick = () => this._closePanel();
 
       // Delegated actions on comment cards (resolve / reopen / delete),
@@ -1001,6 +1034,7 @@ import { buildContextBundle } from './context-bundle.js';
       const route = location.pathname + location.hash;
       const hereOpen = open.filter((c) => !c.meta || !c.meta.route || c.meta.route === route).length;
       if (this._cbadge) { this._cbadge.textContent = hereOpen; this._cbadge.hidden = hereOpen === 0; }
+      if (this._speektxt) this._speektxt.textContent = hereOpen ? `Comments · ${hereOpen}` : 'Comments';
       if (this._total) this._total.textContent = this.comments.length;
       // Tabs: show only the active set (Open | Closed), not both stacked. Counts are totals.
       const tab = this._tab || 'open';
