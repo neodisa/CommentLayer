@@ -411,7 +411,7 @@ import { buildContextBundle } from './context-bundle.js';
    * 5. Controller
    * ========================================================================= */
   const CommentLayer = {
-    version: '1.1.5',   // bump on release; exposed so hosts/self-hosters can check what they run
+    version: '1.2.0',   // bump on release; exposed so hosts/self-hosters can check what they run
     _inited: false,
     init(opts = {}) {
       if (this._inited) return this;
@@ -497,7 +497,7 @@ import { buildContextBundle } from './context-bundle.js';
             <button class="x iconbtn" data-tip="Close panel" aria-label="Close panel">${icon('x')}</button>
           </div>
           <div class="toolbar">
-            <div class="searchwrap"><span class="si">${icon('search')}</span><input class="search" type="text" placeholder="Search comments…"><button class="searchx" hidden title="Clear">${icon('x', 15)}</button></div>
+            <div class="searchwrap"><span class="si">${icon('search')}</span><input class="search" type="text" placeholder="Search — text, author, #5, date…"><button class="searchx" hidden title="Clear">${icon('x', 15)}</button></div>
             <button class="sort" title="Sort by date">↓ Newest</button>
           </div>
           <div class="tabs"><button class="tab tabOpen active" data-tab="open">Open</button><button class="tab tabClosed" data-tab="resolved">Closed</button></div>
@@ -1036,9 +1036,16 @@ import { buildContextBundle } from './context-bundle.js';
       if (this._tabOpen) { this._tabOpen.textContent = `Open (${open.length})`; this._tabOpen.classList.toggle('active', tab === 'open'); }
       if (this._tabClosed) { this._tabClosed.textContent = `Closed (${hist.length})`; this._tabClosed.classList.toggle('active', tab === 'resolved'); }
       let list = tab === 'resolved' ? hist : open;
-      // Search filter (text / author / selected phrase), within the active tab.
+      // Search filter (text / author / #number / date / selected phrase), within
+      // the active tab. "#12" is an exact comment-number lookup; anything else is
+      // a substring match over everything shown on the card.
       const q = this._query;
-      if (q) list = list.filter((c) => (`${c.text} ${c.author} ${(c.meta && c.meta.sel) || ''}`).toLowerCase().includes(q));
+      if (q) {
+        const mNum = q.match(/^#(\d+)$/);
+        list = mNum
+          ? list.filter((c) => this._seqOf(c) === +mNum[1])
+          : list.filter((c) => (`#${this._seqOf(c)} ${c.text} ${c.author} ${c.ts || ''} ${(c.meta && c.meta.sel) || ''}`).toLowerCase().includes(q));
+      }
       const empty = q ? 'No comments match your search.'
         : (tab === 'resolved' ? 'No closed comments yet.'
           : 'No open comments yet. Pull the “Comment” tab, then click any element on the page.');
@@ -1063,7 +1070,7 @@ import { buildContextBundle } from './context-bundle.js';
         ? `<span class="mtag">${mm === 'multi' ? icon('multi', 12) + (c.meta.count || '') : mm === 'area' ? icon('area', 12) + 'area' : icon('text', 12) + 'text'}</span>` : '';
       // Technical anchor info (pinned tag / version / fp / html snapshot) stays in the stored
       // comment for AI export & debugging, but is intentionally NOT shown to the reviewer.
-      const when = `<div class="when">${icon('clock', 12)}${c.ts ? esc(c.ts) : 'time unknown'}</div>`;
+      const when = `<div class="when">${icon('clock', 12)}${c.ts ? markMatch(c.ts, this._query) : 'time unknown'}</div>`;
       const acts = c.status === 'open'
         ? `<button class="ghost" data-cl-act="resolve" data-cl-id="${c.id}" data-tip="Resolve" aria-label="Resolve comment">${icon('check')}</button>`
         : `<button class="ghost" data-cl-act="reopen" data-cl-id="${c.id}" data-tip="Reopen" aria-label="Reopen comment">${icon('reopen')}</button>`;
