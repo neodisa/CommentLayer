@@ -1,6 +1,6 @@
 {
   "name": "comment-layer",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Figma-style comments for AI-generated web UIs. A comment is a change request; when its region is regenerated it auto-resolves. Drop-in, framework-agnostic, Shadow-DOM isolated.",
   "type": "module",
   "main": "src/comment-layer.js",

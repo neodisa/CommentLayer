@@ -336,34 +336,29 @@ import { buildContextBundle } from './context-bundle.js';
     .pinpop .ppbody{font-size:13px;line-height:1.45;color:#dbe0e7;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 
     /* Controls that only exist on touch / narrow screens are hidden by default. */
-    .listbtn{display:none}
     .modes .mstop{display:none}
 
     /* ---- Mobile / narrow screens (≤640px) ----------------------------------
-       The right-edge pull-tab becomes a bottom-right pill in the thumb zone, the
-       review panel becomes a full-screen overlay, and the composers dock to the
-       bottom. Desktop layout is untouched. */
+       The right-edge pull-tab becomes a single round comment FAB in the thumb
+       zone; the review panel becomes a full-screen overlay (opened by tapping a
+       pin); the composers dock to the bottom. Desktop layout is untouched. */
     @media (max-width:640px){
       .panel{width:100%;height:100%;border-left:0}
       .pfoot{display:none}                              /* “C to comment” hint — no key on touch */
 
+      /* One round icon-only FAB: tap to start/stop commenting. */
       .handle{top:auto;bottom:calc(18px + env(safe-area-inset-bottom));right:16px;transform:none;
-        flex-direction:row;gap:8px;border-radius:999px;padding:13px 18px;box-shadow:0 8px 26px rgba(0,0,0,.5)}
-      .handle:hover{transform:none;padding-left:18px}
-      .handle:active{transform:scale(.95)}
+        width:56px;height:56px;padding:0;gap:0;justify-content:center;border-radius:999px;
+        box-shadow:0 10px 28px rgba(0,0,0,.5)}
+      .handle:hover{transform:none;padding:0}
+      .handle:active{transform:scale(.94)}
       .handle.shift{right:16px}                         /* ignore desktop side-shift */
-      .handle svg{width:20px;height:20px}
-      .handle .hlabel{writing-mode:horizontal-tb;transform:none;font-size:13px;letter-spacing:.01em}
+      .handle svg{width:23px;height:23px}
+      .handle .hlabel{display:none}                     /* icon-only on mobile */
+      .handle .cbadge{position:absolute;top:-4px;right:-4px}
 
-      .listbtn{display:inline-grid;place-items:center;position:fixed;right:16px;
-        bottom:calc(76px + env(safe-area-inset-bottom));width:46px;height:46px;border-radius:999px;
-        border:1px solid var(--line2);background:var(--s1);color:var(--hi);cursor:pointer;pointer-events:auto;
-        z-index:2147483200;box-shadow:0 8px 22px rgba(0,0,0,.5)}
-      .listbtn svg{width:19px;height:19px}
-      .listbtn .lbadge{position:absolute;top:-5px;right:-5px}
-
-      .arming .handle,.arming .listbtn{display:none}    /* while commenting, the mode bar takes over */
-      .panelopen .handle,.panelopen .listbtn{opacity:0;pointer-events:none}
+      .arming .handle{display:none}                     /* while commenting, the mode bar takes over */
+      .panelopen .handle{opacity:0;pointer-events:none}
 
       .modes{left:12px;right:12px;transform:none;bottom:calc(12px + env(safe-area-inset-bottom))}
       .modes.show{bottom:calc(12px + env(safe-area-inset-bottom))}
@@ -391,7 +386,7 @@ import { buildContextBundle } from './context-bundle.js';
    * 5. Controller
    * ========================================================================= */
   const CommentLayer = {
-    version: '1.1.1',   // bump on release; exposed so hosts/self-hosters can check what they run
+    version: '1.1.2',   // bump on release; exposed so hosts/self-hosters can check what they run
     _inited: false,
     init(opts = {}) {
       if (this._inited) return this;
@@ -467,7 +462,6 @@ import { buildContextBundle } from './context-bundle.js';
           <span class="hlabel lbl">Comment</span>
           <span class="cbadge" hidden></span>
         </button>
-        <button class="listbtn" title="Open comments" aria-label="Open comments">${icon('comment', 18)}<span class="lbadge cbadge" hidden></span></button>
         <div class="panel">
           <div class="head">
             <span class="ttl">Comments</span><span class="count">0</span>
@@ -490,8 +484,6 @@ import { buildContextBundle } from './context-bundle.js';
       this._fab = root.querySelector('.handle');       // right-edge pull tab (opens panel + arms commenting)
       this._toggleBtn = this._fab;
       this._cbadge = root.querySelector('.cbadge');
-      this._listbtn = root.querySelector('.listbtn');  // mobile-only: opens the review panel
-      this._lbadge = root.querySelector('.lbadge');    // open-count badge on the mobile list button
       this._lbl = root.querySelector('.lbl');
       this._total = root.querySelector('.count');
       this._tab = 'open';
@@ -548,9 +540,6 @@ import { buildContextBundle } from './context-bundle.js';
       // context); comment mode and the panel are otherwise independent — closing the
       // panel does NOT stop commenting.
       this._toggleBtn.onclick = () => this._toggleComment();
-      // Mobile: a dedicated button opens/closes the full-screen review panel, so the
-      // pull-tab is free to just toggle comment mode without covering the page.
-      this._listbtn.onclick = () => (this._panel.classList.contains('show') ? this._closePanel() : this._openPanel());
       root.querySelector('.x').onclick = () => this._closePanel();
 
       // Delegated actions on comment cards (resolve / reopen / delete),
@@ -1012,7 +1001,6 @@ import { buildContextBundle } from './context-bundle.js';
       const route = location.pathname + location.hash;
       const hereOpen = open.filter((c) => !c.meta || !c.meta.route || c.meta.route === route).length;
       if (this._cbadge) { this._cbadge.textContent = hereOpen; this._cbadge.hidden = hereOpen === 0; }
-      if (this._lbadge) { this._lbadge.textContent = hereOpen; this._lbadge.hidden = hereOpen === 0; }
       if (this._total) this._total.textContent = this.comments.length;
       // Tabs: show only the active set (Open | Closed), not both stacked. Counts are totals.
       const tab = this._tab || 'open';
