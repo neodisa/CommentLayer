@@ -342,9 +342,9 @@ import { buildContextBundle } from './context-bundle.js';
     .sheetscrim{display:none}
 
     /* ---- Mobile / narrow screens (≤640px) ----------------------------------
-       One round comment FAB starts/stops commenting; the review panel is a
-       bottom sheet pulled up by a centered drawer tab (the panel's own handle,
-       not a second button). Desktop layout is untouched. */
+       One round comment FAB starts/stops commenting; the mode bar gains a
+       second "Show comments" row that pulls the review panel up as a bottom
+       sheet. Nothing else sits on the page. Desktop layout is untouched. */
     @media (max-width:640px){
       /* Review panel → bottom sheet (slides up from the bottom). */
       .panel{top:auto;bottom:0;left:0;right:0;width:100%;height:86vh;border-left:0;
@@ -356,22 +356,14 @@ import { buildContextBundle } from './context-bundle.js';
       .sheetgrab{display:block;flex:none;width:38px;height:4px;border-radius:999px;
         background:var(--line2);margin:9px auto 3px;cursor:pointer}
 
-      /* Dim, tap-to-close scrim behind the open sheet. */
-      .sheetscrim{position:fixed;inset:0;background:rgba(6,7,9,.5);z-index:2147483140;
+      /* Dim, tap-to-close scrim behind the open sheet (sits above the mode bar). */
+      .sheetscrim{position:fixed;inset:0;background:rgba(6,7,9,.5);z-index:2147483255;
         opacity:0;pointer-events:none;transition:opacity .2s ease}
       .panelopen .sheetscrim{display:block;opacity:1;pointer-events:auto}
+      .panel{z-index:2147483260}                        /* sheet above the scrim & mode bar */
 
-      /* Bottom drawer tab that opens the sheet — the panel's handle. */
-      .sheetpeek{display:inline-flex;align-items:center;gap:7px;position:fixed;left:50%;
-        transform:translateX(-50%);bottom:0;z-index:2147483180;pointer-events:auto;cursor:pointer;
-        border:1px solid var(--line2);border-bottom:0;background:var(--s1);color:var(--hi);
-        font:600 13px/1 inherit;padding:11px 20px calc(11px + env(safe-area-inset-bottom));
-        border-radius:14px 14px 0 0;box-shadow:0 -6px 20px rgba(0,0,0,.4)}
-      .sheetpeek svg{width:16px;height:16px;color:var(--mid)}
-      .arming .sheetpeek,.panelopen .sheetpeek{display:none}
-
-      /* One round icon-only FAB (above the drawer tab): tap to start/stop commenting. */
-      .handle{top:auto;bottom:calc(66px + env(safe-area-inset-bottom));right:16px;transform:none;
+      /* One round icon-only FAB: tap to start/stop commenting. */
+      .handle{top:auto;bottom:calc(18px + env(safe-area-inset-bottom));right:16px;transform:none;
         width:56px;height:56px;padding:0;gap:0;justify-content:center;border-radius:999px;
         box-shadow:0 10px 28px rgba(0,0,0,.5)}
       .handle:hover{transform:none;padding:0}
@@ -384,21 +376,30 @@ import { buildContextBundle } from './context-bundle.js';
       .arming .handle{display:none}                     /* while commenting, the mode bar takes over */
       .panelopen .handle{opacity:0;pointer-events:none}
 
-      .modes{left:12px;right:12px;transform:none;bottom:calc(12px + env(safe-area-inset-bottom))}
+      .modes{left:12px;right:12px;transform:none;bottom:calc(12px + env(safe-area-inset-bottom));
+        flex-wrap:wrap}                                  /* modes on row 1, "Show comments" on row 2 */
       .modes.show{bottom:calc(12px + env(safe-area-inset-bottom))}
       .modes.shift{left:12px}
       .modes .mode{flex:1;justify-content:center;padding:12px 6px;font-size:12.5px}
       .modes .mode[data-mode="area"]{display:none}      /* drag-select doesn't map to touch */
       .modes .mstop{display:inline-flex;flex:0 0 auto}
 
-      /* Composers dock above the bottom mode bar (which is always visible while
-         commenting), so their action buttons never hide behind it. */
-      .mcompose{left:12px;right:12px;width:auto;bottom:calc(80px + env(safe-area-inset-bottom))}
+      /* "Show comments" — second row of the mode bar; pulls up the review sheet. */
+      .sheetpeek{display:inline-flex;align-items:center;justify-content:center;gap:7px;
+        flex:1 0 100%;margin-top:4px;padding:11px 6px;cursor:pointer;
+        border:0;border-top:1px solid var(--line);background:transparent;color:var(--mid);
+        font:600 12.5px/1 inherit;border-radius:0 0 9px 9px;transition:background .12s,color .12s}
+      .sheetpeek:hover{background:var(--s3);color:var(--hi)}
+      .sheetpeek svg{width:15px;height:15px}
+
+      /* Composers dock above the (now two-row) mode bar, so their action
+         buttons never hide behind it. */
+      .mcompose{left:12px;right:12px;width:auto;bottom:calc(126px + env(safe-area-inset-bottom))}
       .mcompose.shift{right:12px}
       .mcta{font-size:16px}                             /* ≥16px avoids iOS auto-zoom */
 
       .compose{left:12px !important;right:12px !important;width:auto !important;
-        top:auto !important;bottom:calc(80px + env(safe-area-inset-bottom)) !important}
+        top:auto !important;bottom:calc(126px + env(safe-area-inset-bottom)) !important}
       .compose textarea{font-size:16px}
 
       .search{font-size:16px}
@@ -410,7 +411,7 @@ import { buildContextBundle } from './context-bundle.js';
    * 5. Controller
    * ========================================================================= */
   const CommentLayer = {
-    version: '1.1.3',   // bump on release; exposed so hosts/self-hosters can check what they run
+    version: '1.1.4',   // bump on release; exposed so hosts/self-hosters can check what they run
     _inited: false,
     init(opts = {}) {
       if (this._inited) return this;
@@ -475,6 +476,7 @@ import { buildContextBundle } from './context-bundle.js';
           <button class="mode" data-mode="multi" title="Pick several elements for one comment">${icon('multi')}Multi</button>
           <button class="mode" data-mode="area" title="Drag a region to comment on">${icon('area')}Area</button>
           <button class="mode mstop" title="Stop commenting">${icon('x', 15)}Done</button>
+          <button class="sheetpeek" title="Open comments" aria-label="Open comments">${icon('comment', 15)}<span class="speektxt">Show comments</span></button>
         </div>
         <div class="mcompose">
           <div class="mchead">${icon('multi', 14)}Comment on <b class="mccount">0</b> element(s)</div>
@@ -487,7 +489,6 @@ import { buildContextBundle } from './context-bundle.js';
           <span class="cbadge" hidden></span>
         </button>
         <div class="sheetscrim"></div>
-        <button class="sheetpeek" title="Open comments" aria-label="Open comments">${icon('comment', 15)}<span class="speektxt">Comments</span></button>
         <div class="panel">
           <div class="sheetgrab" aria-hidden="true"></div>
           <div class="head">
@@ -1034,7 +1035,7 @@ import { buildContextBundle } from './context-bundle.js';
       const route = location.pathname + location.hash;
       const hereOpen = open.filter((c) => !c.meta || !c.meta.route || c.meta.route === route).length;
       if (this._cbadge) { this._cbadge.textContent = hereOpen; this._cbadge.hidden = hereOpen === 0; }
-      if (this._speektxt) this._speektxt.textContent = hereOpen ? `Comments · ${hereOpen}` : 'Comments';
+      if (this._speektxt) this._speektxt.textContent = hereOpen ? `Show comments · ${hereOpen}` : 'Show comments';
       if (this._total) this._total.textContent = this.comments.length;
       // Tabs: show only the active set (Open | Closed), not both stacked. Counts are totals.
       const tab = this._tab || 'open';
