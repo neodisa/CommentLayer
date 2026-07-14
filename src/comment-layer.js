@@ -411,7 +411,7 @@ import { buildContextBundle } from './context-bundle.js';
    * 5. Controller
    * ========================================================================= */
   const CommentLayer = {
-    version: '1.1.4',   // bump on release; exposed so hosts/self-hosters can check what they run
+    version: '1.1.5',   // bump on release; exposed so hosts/self-hosters can check what they run
     _inited: false,
     init(opts = {}) {
       if (this._inited) return this;
@@ -792,9 +792,13 @@ import { buildContextBundle } from './context-bundle.js';
       if (!this._multiSel.length || !text) { if (this._mcta) this._mcta.focus(); return; }
       const els = this._multiSel.slice();
       const fps = els.map((el) => fingerprint(el, this.target));
-      const rect = unionRect(els);   // screenshot the whole selection, not just the anchor
+      const rect = unionRect(els);   // kept in meta so the selection region is on record
+      // Screenshot the closest common ancestor: it shows every picked element in
+      // context, and the element render path is the only reliable one.
+      let anc = els[0];
+      while (anc && anc !== this.target && !els.every((e) => anc.contains(e))) anc = anc.parentElement;
       this._clearMulti();
-      this._addComment(els[0], text, '', { mode: 'multi', fps, count: els.length, rect });
+      this._addComment(els[0], text, '', { mode: 'multi', fps, count: els.length, rect, shotEl: anc || els[0] });
     },
     _clearArea() { if (this._areaBox) { this._areaBox.remove(); this._areaBox = null; } this._area = null; },
     _elementAt(x, y) {
@@ -872,11 +876,14 @@ import { buildContextBundle } from './context-bundle.js';
       });
       this._persist(); this._relocate(); this._render();   // don't force the panel open — allow commenting with it closed
 
-      // Capture a small screenshot so the "before" is visible later. For area /
-      // multi we shoot the whole annotated region (extra.rect); for element / text
-      // we shoot the element itself. Async + fail-soft.
+      // Capture a small screenshot so the "before" is visible later. Always an
+      // ELEMENT render: for element/text it's the element, for area the anchor
+      // under the drawn region, for multi the selection's common ancestor
+      // (extra.shotEl). Coordinate-cropped full-page renders are not used — the
+      // rendered clone's layout can differ from the live page (font fallback,
+      // panel shift), which silently puts a rect crop on the wrong region.
       const newId = this.comments[this.comments.length - 1].id;
-      const shotTarget = (extra && extra.rect) ? extra.rect : el;
+      const shotTarget = (extra && extra.shotEl && extra.shotEl.nodeType === 1) ? extra.shotEl : el;
       this._captureShot(shotTarget).then((shot) => {
         if (!shot) return;
         const c = this.comments.find((x) => x.id === newId);
@@ -886,8 +893,8 @@ import { buildContextBundle } from './context-bundle.js';
       });
     },
 
-    // target = an element (element/text modes) OR a viewport rect {x,y,w,h}
-    // (area/multi modes → shoot the whole annotated region).
+    // target = an element. Element renders are the only html2canvas path that
+    // stays faithful across pages; coordinate-cropped document renders drift.
     async _captureShot(target) {
       try {
         const h2c = await loadShotLib();
@@ -896,19 +903,6 @@ import { buildContextBundle } from './context-bundle.js';
         if (target && target.nodeType === 1) {
           target.classList.remove('cl-hl');            // don't bake the hover outline into the shot
           canvas = await h2c(target, base);
-        } else if (target && typeof target.w === 'number') {
-          const r = target;
-          // x/y are absolute page coords (viewport rect + current scroll). html2canvas
-          // must be told scrollX/scrollY:0 so it treats them as page coords — otherwise
-          // it re-applies the live scroll and the crop lands scroll-pixels off-target
-          // (on a scrolled page you'd screenshot the wrong region, not what was selected).
-          canvas = await h2c(document.body, Object.assign({
-            x: r.x + (window.scrollX || 0), y: r.y + (window.scrollY || 0),
-            width: Math.max(1, r.w), height: Math.max(1, r.h),
-            scrollX: 0, scrollY: 0,
-            windowWidth: document.documentElement.scrollWidth,
-            windowHeight: document.documentElement.scrollHeight,
-          }, base));
         } else { return null; }
         const maxW = 360, k = Math.min(1, maxW / (canvas.width || maxW)) || 1;
         const out = document.createElement('canvas');
