@@ -23,6 +23,7 @@ and self-hosted on your own database. Nothing phones home.
 - **Multi-user + realtime** via Supabase, or zero-backend **localStorage** for a quick solo try.
 - **Review panel** — search, sort, Open/Closed tabs, resolve / reopen / delete, inline edit, keyboard shortcuts (`C` comment · `P` panel · `H` hide pins · `Esc` back out).
 - **Works on touch** — on phones a bottom-right button arms commenting and the panel becomes a full-screen sheet, so the page underneath stays fully usable.
+- **Comment on dropdowns, modals and tooltips** — **Freeze** (on by default, toggle in the mode bar) keeps the host page from dismissing its own overlays while you annotate them. Press `C` to arm over an already-open overlay: the keyboard fires no pointer event, so nothing can close. Works inside an iframe preview too.
 
 ## Quick start (self-hosted, ~10 min)
 
@@ -104,6 +105,7 @@ CommentLayer.init({
   storage,       // omit for localStorage; or pass the Supabase adapter
   user,          // optional { name }; otherwise prompts once
   version,       // optional build string; drives auto-resolve on change
+  freeze,        // default true: hold the host page still while commenting (see below)
 });
 
 CommentLayer.regenerated();      // re-run auto-resolve → { resolved, carried }

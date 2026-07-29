@@ -171,6 +171,7 @@ import { buildContextBundle } from './context-bundle.js';
     multi: '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>',
     area: '<path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>',
     arrow: '<path d="M7 17L17 7M17 7H9M17 7v8"/>',
+    freeze: '<path d="M12 2v20M4.5 6.5l15 11M19.5 6.5l-15 11"/><path d="M12 6.5l2.5-2M12 6.5L9.5 4.5M12 17.5l2.5 2M12 17.5l-2.5 2"/>',
   };
   function icon(n, s) {
     return '<svg class="ic" width="' + (s || 16) + '" height="' + (s || 16) + '" viewBox="0 0 24 24" fill="none" ' +
@@ -191,6 +192,8 @@ import { buildContextBundle } from './context-bundle.js';
       display:grid;place-items:center;box-shadow:0 4px 14px rgba(0,0,0,.5),0 0 0 2px rgba(244,246,249,.92);
       pointer-events:auto;cursor:pointer;transition:transform .14s ease}
     .pin:hover{transform:translate(-50%,-50%) scale(1.12)}
+    .root.local .pin{min-width:18px;height:18px;padding:0;background:#7C6CF0;box-shadow:0 4px 14px rgba(0,0,0,.5),0 0 0 2px rgba(124,108,240,.55)}
+    .root.local .seq{display:none}
     .modes{position:fixed;left:50%;bottom:4px;transform:translateX(-50%);opacity:0;pointer-events:none;
       display:flex;gap:3px;align-items:center;background:var(--s1);border:1px solid var(--line2);border-radius:12px;padding:4px;
       z-index:2147483250;box-shadow:0 24px 60px rgba(0,0,0,.6);transition:opacity .2s ease,bottom .2s ease}
@@ -201,6 +204,11 @@ import { buildContextBundle } from './context-bundle.js';
     .modes .mode svg{width:15px;height:15px}
     .modes .mode:hover{background:var(--s3);color:var(--hi)}
     .modes .mode.active{background:var(--white);color:var(--onwhite)}
+    /* Freeze is a toggle, not one of the modes — separate it and give it its own
+       on-state so it never reads as "the selected mode". */
+    .modes .mfreeze{margin-left:3px;border-left:1px solid var(--line2);border-radius:0 8px 8px 0;padding-left:13px}
+    .modes .mfreeze.on{color:var(--open)}
+    .modes .mfreeze.on:hover{background:var(--openbg);color:var(--open)}
     .mcompose{position:fixed;right:20px;bottom:80px;width:300px;display:none;flex-direction:column;
       background:var(--s1);border:1px solid var(--line2);border-radius:var(--r);padding:12px;pointer-events:auto;
       z-index:2147483250;box-shadow:0 24px 60px rgba(0,0,0,.6);transition:right .2s ease}
@@ -384,13 +392,16 @@ import { buildContextBundle } from './context-bundle.js';
       .modes .mode[data-mode="area"]{display:none}      /* drag-select doesn't map to touch */
       .modes .mstop{display:inline-flex;flex:0 0 auto}
 
-      /* "Show comments" — second row of the mode bar; pulls up the review sheet. */
+      /* Second row of the mode bar: Freeze toggle + "Show comments" (pulls up the
+         review sheet). Modes and Done stay on row 1. */
       .sheetpeek{display:inline-flex;align-items:center;justify-content:center;gap:7px;
-        flex:1 0 100%;margin-top:4px;padding:11px 6px;cursor:pointer;
+        flex:1 1 55%;margin-top:4px;padding:11px 6px;cursor:pointer;
         border:0;border-top:1px solid var(--line);background:transparent;color:var(--mid);
-        font:600 12.5px/1 inherit;border-radius:0 0 9px 9px;transition:background .12s,color .12s}
+        font:600 12.5px/1 inherit;border-radius:0 0 9px 0;transition:background .12s,color .12s}
       .sheetpeek:hover{background:var(--s3);color:var(--hi)}
       .sheetpeek svg{width:15px;height:15px}
+      .modes .mfreeze{flex:1 1 35%;margin:4px 0 0;padding:11px 6px;
+        border:0;border-top:1px solid var(--line);border-radius:0 0 0 9px}
 
       /* Composers dock above the (now two-row) mode bar, so their action
          buttons never hide behind it. */
@@ -411,7 +422,7 @@ import { buildContextBundle } from './context-bundle.js';
    * 5. Controller
    * ========================================================================= */
   const CommentLayer = {
-    version: '1.2.0',   // bump on release; exposed so hosts/self-hosters can check what they run
+    version: '1.3.0',   // bump on release; exposed so hosts/self-hosters can check what they run
     _inited: false,
     init(opts = {}) {
       if (this._inited) return this;
@@ -421,6 +432,8 @@ import { buildContextBundle } from './context-bundle.js';
       this.store = opts.storage && typeof opts.storage === 'object' ? opts.storage : LocalStorageAdapter(this.projectId);
       this.user = opts.user || null;
       this.appVersion = opts.version != null ? opts.version : null;
+      this.freeze = opts.freeze !== false;   // hold the host page still while commenting; opt out with freeze:false
+      this.appLocal = !!opts.local;   // «Локальні · мені» — інший колір піна, без номера
       this.comments = this.store.load();
       this._backupKey = 'comment-layer:backup:' + this.projectId;
       this._recoverBackup();          // resurrect anything a failed write left behind
@@ -466,7 +479,7 @@ import { buildContextBundle } from './context-bundle.js';
       document.body.appendChild(host);
       const sh = host.attachShadow({ mode: 'open' });
       const style = document.createElement('style'); style.textContent = STYLE; sh.appendChild(style);
-      const root = document.createElement('div'); root.className = 'root'; sh.appendChild(root);
+      const root = document.createElement('div'); root.className = 'root' + (this.appLocal ? ' local' : ''); sh.appendChild(root);
       root.innerHTML = `
         <div class="pins"></div>
         <div class="pinpop"></div>
@@ -476,6 +489,7 @@ import { buildContextBundle } from './context-bundle.js';
           <button class="mode" data-mode="multi" title="Pick several elements for one comment">${icon('multi')}Multi</button>
           <button class="mode" data-mode="area" title="Drag a region to comment on">${icon('area')}Area</button>
           <button class="mode mstop" title="Stop commenting">${icon('x', 15)}Done</button>
+          <button class="mode mfreeze" title="Freeze the page — keep dropdowns, modals and tooltips open while you comment">${icon('freeze', 15)}Freeze</button>
           <button class="sheetpeek" title="Open comments" aria-label="Open comments">${icon('comment', 15)}<span class="speektxt">Show comments</span></button>
         </div>
         <div class="mcompose">
@@ -550,17 +564,22 @@ import { buildContextBundle } from './context-bundle.js';
       this._mcompose = root.querySelector('.mcompose');
       this._mcta = root.querySelector('.mcta');
       this._mccount = root.querySelector('.mccount');
-      root.querySelectorAll('.mode:not(.mstop)').forEach((b) => {
+      root.querySelectorAll('.mode:not(.mstop):not(.mfreeze)').forEach((b) => {
         b.onclick = () => {
           this._clearMulti(); this._clearArea(); this._setHover(false); // drop any element outline
           this._mode = b.getAttribute('data-mode');
-          root.querySelectorAll('.mode:not(.mstop)').forEach((x) => x.classList.toggle('active', x === b));
+          root.querySelectorAll('.mode:not(.mstop):not(.mfreeze)').forEach((x) => x.classList.toggle('active', x === b));
           this._mcompose.classList.toggle('show', this._mode === 'multi'); // multi uses a modal
           this._armComment(true); // picking a mode readies commenting
         };
       });
       // Mobile mode bar carries a "Done" button (the pull-tab is hidden while commenting).
       root.querySelector('.mstop').onclick = () => this._armComment(false);
+      // Freeze toggle — shields the host page from the events that dismiss its own
+      // overlays (see _shield). On by default; turn it off to operate the host UI.
+      this._freezeBtn = root.querySelector('.mfreeze');
+      this._freezeBtn.onclick = () => this._setFreeze(!this.freeze);
+      this._setFreeze(this.freeze);   // reflect the initial state on the toggle
       root.querySelector('.mcsave').onclick = () => this._finishMulti();
       root.querySelector('.mccancel').onclick = () => this._clearMulti();
       this._mcta.onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); this._finishMulti(); } };
@@ -688,32 +707,41 @@ import { buildContextBundle } from './context-bundle.js';
 
       // Keyboard shortcuts: C = comment mode, P = panel, H = hide pins, Esc = cancel/close.
       this._keyHandler = (e) => {
-        const a = document.activeElement;
-        const typing = !!(a && (a === this._host || /^(input|textarea|select)$/i.test(a.tagName || '') || a.isContentEditable));
+        const eaten = () => { e.preventDefault(); e.stopImmediatePropagation(); }; // ours — the host must not also act on it
         if (e.key === 'Escape') {
           const lb = this._sh.querySelector('.cllb');
-          if (lb) { lb.remove(); return; }
+          if (lb) { lb.remove(); eaten(); return; }
           const compose = this._sh.querySelector('.compose');
-          if (compose) { compose.remove(); return; }
-          if (this._editingId) { this._editingId = null; this._render(); return; }
+          if (compose) { compose.remove(); eaten(); return; }
+          if (this._editingId) { this._editingId = null; this._render(); eaten(); return; }
           // Peel back one layer at a time: leave comment mode first (also clears any
           // multi/area selection — _armComment(false) does that), THEN close the panel.
           // Works with the panel closed too, since comment mode is panel-independent.
-          if (this.commentMode) { this._armComment(false); return; }
-          if (this._panel.classList.contains('show')) this._closePanel();
+          // While frozen we swallow Escape either way, so the host's own modal survives.
+          if (this.commentMode) { const f = this._frozen(); this._armComment(false); if (f) eaten(); return; }
+          if (this._panel.classList.contains('show')) { this._closePanel(); eaten(); }
           return;
         }
-        if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+        if (this._isTyping() || e.metaKey || e.ctrlKey || e.altKey) return;
         const k = e.key.toLowerCase();
-        if (k === 'c') { this._toggleComment(); }
-        else if (k === 'p') { this._panel.classList.contains('show') ? this._closePanel() : this._openPanel(); }
-        else if (k === 'h') { this._togglePins(); }
+        if (k === 'c') { this._toggleComment(); eaten(); }
+        else if (k === 'p') { this._panel.classList.contains('show') ? this._closePanel() : this._openPanel(); eaten(); }
+        else if (k === 'h') { this._togglePins(); eaten(); }
       };
       // Bind on `window` (not `document`) in the capture phase: window capture runs
       // before any document- or target-level handler, so a host page that intercepts
       // keydown on document (or in the bubble phase) can't swallow the shortcut. This
-      // is why `C` failed on some host apps. One target only — no double-firing.
-      window.addEventListener('keydown', this._keyHandler, true);
+      // is why `C` failed on some host apps.
+      // Also bind on every same-origin ancestor window: review tools preview the page
+      // inside an iframe, and keys go to whichever document holds focus — without this
+      // the shortcut only works after clicking inside the frame.
+      const keyTargets = [window];
+      try {
+        let w = window;
+        while (w !== w.parent) { w = w.parent; void w.document.documentElement; keyTargets.push(w); }
+      } catch (err) { /* cross-origin ancestor — can't listen there, ignore */ }
+      keyTargets.forEach((w) => w.addEventListener('keydown', this._keyHandler, true));
+      this._installShield();
 
       // host-page styles (light DOM): hover highlight + page shift when panel open
       const hl = document.createElement('style');
@@ -721,7 +749,11 @@ import { buildContextBundle } from './context-bundle.js';
         + '.cl-msel{outline:2px solid #FBBC55 !important;outline-offset:2px;box-shadow:0 0 0 4px rgba(251,188,85,.22) !important}'
         + 'body.cl-shift{margin-right:372px !important;transition:margin-right .2s ease}'
         + '@keyframes cl-el-flash{0%{outline:3px solid #FBBC55;outline-offset:2px;box-shadow:0 0 0 4px rgba(251,188,85,.4)}100%{outline:3px solid transparent;box-shadow:none}}'
-        + '.cl-el-flash{animation:cl-el-flash 1.5s ease}';
+        + '.cl-el-flash{animation:cl-el-flash 1.5s ease}'
+        // Frozen: hold the host page still so carousels / auto-dismissing toasts don't
+        // run away mid-comment. Light-DOM selector only — our own UI lives in a shadow
+        // root and keeps animating.
+        + 'html.cl-freeze *,html.cl-freeze *::before,html.cl-freeze *::after{animation-play-state:paused !important}';
       document.head.appendChild(hl);
     },
 
@@ -752,6 +784,84 @@ import { buildContextBundle } from './context-bundle.js';
     },
     // Narrow / touch layout: matches the CSS breakpoint so JS behavior stays in sync.
     _isMobile() { return typeof matchMedia === 'function' && matchMedia('(max-width:640px)').matches; },
+
+    /* ---- freeze --------------------------------------------------------------
+     * Host apps dismiss their own dropdowns / modals / tooltips on an outside
+     * click, on focus loss and on pointer-out. Reaching for our Comment button
+     * fires exactly those, so the overlay you wanted to comment on disappears
+     * before you can. While frozen we keep those signals away from the host.
+     * Note: an outside-click handler the host registered in the CAPTURE phase on
+     * document still sees the click (it runs before the event reaches us), so the
+     * reliable way to arm comment mode over an open overlay is the `C` key — it
+     * produces no pointer event at all. Freeze covers everything else. */
+    _frozen() { return !!(this.commentMode && this.freeze); },
+    _setFreeze(on) {
+      this.freeze = !!on;
+      if (this._freezeBtn) {
+        this._freezeBtn.classList.toggle('on', this.freeze);
+        this._freezeBtn.setAttribute('aria-pressed', String(this.freeze));
+      }
+      this._syncFreeze();
+    },
+    _syncFreeze() { document.documentElement.classList.toggle('cl-freeze', this._frozen()); },
+    _installShield() {
+      const H = this._host;
+      const inWidget = (e) => {
+        const p = e.composedPath ? e.composedPath() : null;
+        if (p && p.length) return p.indexOf(H) !== -1;
+        const t = e.target;
+        return t === H || !!(t && t.nodeType === 1 && H.contains(t));
+      };
+      // 1. Our own pointer events stop at the widget boundary, so the host's
+      //    bubble-phase "clicked outside" handlers never learn about them.
+      //    Gated on `freeze` alone, NOT on comment mode: the click that ARMS
+      //    comment mode is the one that used to dismiss the overlay, and at that
+      //    moment comment mode is still off. A click on our chrome is never a
+      //    click "outside" from the host's point of view either way.
+      const stopAtBoundary = (e) => { if (this.freeze) e.stopPropagation(); };
+      ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu', 'touchstart', 'touchend']
+        .forEach((t) => H.addEventListener(t, stopAtBoundary));
+      // 2. Don't take focus off the host page: a control that never focuses can't
+      //    trigger blur/focusout dismissal — and it keeps the shortcuts alive,
+      //    since the typing guard looks at the focused element. Text fields inside
+      //    the widget (compose, search) must still focus, so they're exempt.
+      H.addEventListener('mousedown', (e) => {
+        if (!this.freeze) return;              // same reason as (1): mousedown precedes arming
+        const t = e.composedPath ? e.composedPath()[0] : e.target;
+        const editable = t && t.nodeType === 1
+          && (/^(input|textarea|select)$/i.test(t.tagName || '') || t.isContentEditable);
+        if (!editable) e.preventDefault();     // suppress focus, keep the click
+      }, true);
+      // 3. Drop the dismiss-direction events coming from the host page before its
+      //    handlers run. The "enter" counterparts pass through, so hovering still
+      //    OPENS a tooltip — it just no longer closes while you comment on it.
+      this._shield = (e) => {
+        if (!this._frozen() || inWidget(e)) return;   // our own pin popovers must keep working
+        e.stopImmediatePropagation();
+      };
+      ['mouseout', 'mouseleave', 'pointerout', 'pointerleave', 'focusout', 'blur']
+        .forEach((t) => window.addEventListener(t, this._shield, true));
+    },
+    _isTyping() {
+      // The genuinely focused element, piercing shadow roots: clicking our chrome
+      // makes document.activeElement the shadow HOST, which used to look like
+      // "typing" and killed every shortcut until you clicked the page again.
+      let a = document.activeElement;
+      while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+      if (!a || a.nodeType !== 1) return false;
+      const tag = (a.tagName || '').toLowerCase();
+      const isField = tag === 'textarea' || tag === 'select' || a.isContentEditable
+        || (tag === 'input' && !/^(checkbox|radio|button|submit|reset|file|range|color|image)$/i.test(a.type || 'text'));
+      if (!isField) return false;
+      // Canvas and diagram editors park focus in an off-screen 1px field to capture
+      // keys. That is not typing, and it must not disable the shortcuts.
+      const w = a.ownerDocument.defaultView || window;
+      const r = a.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return false;
+      if (r.bottom <= 0 || r.right <= 0 || r.top >= w.innerHeight || r.left >= w.innerWidth) return false;
+      const st = w.getComputedStyle(a);
+      return st.visibility !== 'hidden' && st.opacity !== '0';
+    },
     _armComment(on) {
       this.commentMode = on;
       this._toggleBtn.classList.toggle('active', on);
@@ -759,6 +869,7 @@ import { buildContextBundle } from './context-bundle.js';
       if (this._lbl) this._lbl.textContent = on ? 'Stop' : 'Comment'; // vertical tab label; icon + badge stay
       if (this._modesBar) this._modesBar.classList.toggle('show', on); // bar shows only while actively commenting
       if (!on) { this._clearMulti(); this._clearArea(); if (this._mcompose) this._mcompose.classList.remove('show'); }
+      this._syncFreeze();   // the shield is only active while commenting
       this._setHover(on);
     },
     // Toggle comment mode independently of the panel. On desktop, turning it on also
@@ -952,7 +1063,7 @@ import { buildContextBundle } from './context-bundle.js';
         const r = c._el.getBoundingClientRect();
         if (r.width === 0 && r.height === 0) continue;
         const p = document.createElement('div');
-        p.className = 'pin'; p.textContent = this._seqOf(c);
+        p.className = 'pin'; p.textContent = this.appLocal ? '' : this._seqOf(c);
         p.style.left = (r.left + 10) + 'px'; p.style.top = (r.top + 10) + 'px';
         p.onclick = () => this._focusCard(c.id);
         p.onmouseenter = () => this._showPinPop(p, c);   // hover → preview the comment beside the pin
