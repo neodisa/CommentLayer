@@ -99,6 +99,7 @@ readiness rule). Skip this if you don't need version-aware auto-resolve.
 
 ## API reference (already available on `window.CommentLayer` after init)
 - `init({ projectId, storage, target?, user?, version?, autoDetectRegeneration? })`
+- Add `data-comment-ignore` to any element to exclude it and its descendants from Element, Text, Multi, and Area annotation.
 - `regenerated()` → `{resolved, carried}` — run the version-aware auto-resolve
 - `open()`, `getComments()`, `resolveComment(id)`, `reopenComment(id)`, `removeComment(id)`
 - Each comment stores: text, author, status, element fingerprint (`fp`: tag, text,

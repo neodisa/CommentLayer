@@ -41,6 +41,10 @@ import { buildContextBundle } from './context-bundle.js';
     return false;
   }
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  function isCommentIgnored(el) {
+    if (el && el.nodeType !== 1) el = el.parentElement;
+    return !!(el && el.closest && el.closest('[data-comment-ignore]'));
+  }
   const stableClasses = (el) => [...el.classList].filter((t) => !isHashy(t)).sort();
 
   function structSig(el) {
@@ -632,7 +636,7 @@ import { buildContextBundle } from './context-bundle.js';
         if (!this.commentMode) return;
         if (this._host.contains(e.target)) return; // ignore widget chrome
         const el = e.target;
-        if (!this.target.contains(el)) return;
+        if (!this.target.contains(el) || isCommentIgnored(el)) return;
         e.preventDefault(); e.stopPropagation();
         if (this._mode === 'multi') { this._toggleMulti(el); return; }
         if (this._mode === 'area' || this._mode === 'text') return; // handled by drag / mouseup
@@ -649,7 +653,14 @@ import { buildContextBundle } from './context-bundle.js';
         const txt = s && s.toString().trim();
         if (!txt) return;
         const anchor = (s.anchorNode && s.anchorNode.nodeType === 3 ? s.anchorNode.parentElement : s.anchorNode) || e.target;
-        if (!this.target.contains(anchor)) return;
+        if (!this.target.contains(anchor) || isCommentIgnored(anchor) || isCommentIgnored(s.focusNode)) return;
+        const range = s.rangeCount ? s.getRangeAt(0) : null;
+        if (range) {
+          const ignored = this.target.matches('[data-comment-ignore]')
+            ? [this.target]
+            : this.target.querySelectorAll('[data-comment-ignore]');
+          for (const el of ignored) if (range.intersectsNode(el)) return;
+        }
         this._openCompose(anchor, txt, { mode: 'text' });
       };
       document.addEventListener('mouseup', this._upHandler, true);
@@ -657,7 +668,8 @@ import { buildContextBundle } from './context-bundle.js';
       // Area mode: drag a rectangle → comment on the region.
       this._area = null; this._areaBox = null;
       this._areaDown = (e) => {
-        if (!this.commentMode || this._mode !== 'area' || this._host.contains(e.target) || !this.target.contains(e.target)) return;
+        if (!this.commentMode || this._mode !== 'area' || this._host.contains(e.target)
+          || !this.target.contains(e.target) || isCommentIgnored(e.target)) return;
         e.preventDefault();
         this._area = { x0: e.clientX, y0: e.clientY };
         this._areaBox = document.createElement('div'); this._areaBox.className = 'clarea';
@@ -691,7 +703,9 @@ import { buildContextBundle } from './context-bundle.js';
         // area modes the outline is confusing (you're selecting text / a region).
         if (this._mode !== 'element' && this._mode !== 'multi') return;
         const el = e.target;
-        if (el && this.target.contains(el) && !this._host.contains(el)) { el.classList.add('cl-hl'); this._hoverEl = el; }
+        if (el && this.target.contains(el) && !this._host.contains(el) && !isCommentIgnored(el)) {
+          el.classList.add('cl-hl'); this._hoverEl = el;
+        }
       };
       document.addEventListener('mousemove', this._moveHandler, true);
 
@@ -914,7 +928,7 @@ import { buildContextBundle } from './context-bundle.js';
     _clearArea() { if (this._areaBox) { this._areaBox.remove(); this._areaBox = null; } this._area = null; },
     _elementAt(x, y) {
       const el = document.elementFromPoint(x, y);
-      return (el && this.target.contains(el) && !this._host.contains(el)) ? el : null;
+      return (el && this.target.contains(el) && !this._host.contains(el) && !isCommentIgnored(el)) ? el : null;
     },
 
     _setHover(on) { if (!on && this._hoverEl) { this._hoverEl.classList.remove('cl-hl'); this._hoverEl = null; } },

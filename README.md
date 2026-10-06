@@ -18,6 +18,7 @@ and self-hosted on your own database. Nothing phones home.
 
 - **Diff-driven auto-resolve** — comments resolve themselves when their region is rewritten, and carry forward when it isn't. The thing no feedback tool and no AI builder does.
 - **Click to comment** on any element — plus **Text** (a phrase), **Multi** (several elements → one comment) and **Area** (drag a region).
+- **Exclude UI from annotation** with `data-comment-ignore` on any element; its entire subtree is skipped in every selection mode.
 - **Pins with hover previews**, two-way pin ↔ card highlight, stable never-reused numbers.
 - **Element screenshots** — every comment stores a thumbnail of what it looked like.
 - **Multi-user + realtime** via Supabase, or zero-backend **localStorage** for a quick solo try.
@@ -114,6 +115,16 @@ CommentLayer.getComments();      // current comments (plain objects)
 CommentLayer.resolveComment(id); // mark resolved  ·  reopenComment(id)  ·  removeComment(id)
 CommentLayer.version;            // the running version
 ```
+
+Add `data-comment-ignore` to an element to prevent comments on it and anything inside it:
+
+```html
+<nav data-comment-ignore>
+  <!-- Navigation and all its children are not commentable. -->
+</nav>
+```
+
+This works in Element, Text, Multi, and Area modes. Ignored clicks are left to the page normally.
 
 ## Docs
 
